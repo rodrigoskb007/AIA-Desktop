@@ -1,0 +1,8 @@
+AIA V1.3.0 RC — GUIA RÁPIDO
+1. Preencha o contexto da coleta.
+2. Configure Threshold/Confidence por classe quando aplicável.
+3. Registre as inspeções com Real e Detectado.
+4. Para D-O explícito, selecione a inspeção e informe Correspondentes.
+5. Consulte D-I como indicador principal no Dashboard, Técnica e PDF.
+6. Exporte PDF, Excel ou CSV; confira Dados Registrados e Auditoria.
+7. Antes de liberar resultados, execute VALIDAR_AIA.bat.
