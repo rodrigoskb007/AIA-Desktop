@@ -1,0 +1,50 @@
+AIA.V1.3.0 RC
+=============
+
+Esta é a linha de desenvolvimento V1.3.0 RC do Autaza Inspection Analytics.
+A V1.2.0 Oficial permanece congelada e não é alterada por este pacote.
+
+PRIMEIRA INSTALACAO
+1. Extraia TODA a pasta "AIA.V1.3.0 RC" para um local gravavel, por exemplo Documentos.
+2. Nao execute o programa diretamente de dentro do ZIP.
+3. Execute INSTALAR_DEPENDENCIAS_AIA.bat.
+4. Execute VALIDAR_AIA.bat e confirme que todas as verificacoes foram aprovadas.
+5. Execute CRIAR_ATALHO_DESKTOP.bat.
+6. Abra o AIA pelo atalho "AIA V1.3.0 RC" criado na area de trabalho.
+
+ARQUIVO PRINCIPAL
+- AIA_V1_3_0_RC.py
+
+ARQUIVOS DE APOIO
+- INICIAR_AIA.bat: abre o AIA manualmente.
+- INSTALAR_DEPENDENCIAS_AIA.bat: instala OpenPyXL e ReportLab.
+- CRIAR_ATALHO_DESKTOP.bat: cria o atalho do AIA na area de trabalho.
+- REMOVER_ATALHO_DESKTOP.bat: remove somente o atalho.
+- VALIDAR_AIA.bat: executa verificacoes de integridade do motor.
+- requirements.txt: dependencias Python.
+- SHA256SUMS.txt: hashes da baseline V1.2.0 preservada como referência.
+
+ABRIR PROJETO JSON
+- Use o botão ABRIR JSON no cabeçalho do AIA.
+- Selecione um projeto salvo anteriormente pelo botão SALVAR.
+- A coleta, os dados registrados, os snapshots por classe, o histórico e a meta são restaurados.
+- Projetos de versões anteriores sem os campos novos também podem ser abertos.
+
+DOCUMENTACAO
+A pasta Documentacao contem:
+- Manual Oficial AIA V1.2.0
+- Guia Rapido AIA V1.2.0
+- Tutorial de Instalacao e Atalho
+- Checklist de Validacao de Campo
+
+DOCUMENTAÇÃO V1.3.0 RC
+- MANUAL_ATUALIZADO_AIA_V1.3.0_RC.txt
+- GUIA_RAPIDO_AIA_V1.3.0_RC.txt
+- CHANGELOG_V1.3.0_RC.txt
+- RELATORIO_DE_VALIDACAO_V1.3.0_RC.txt
+
+IMPORTANTE
+- Python 3 e necessario e nao esta incluido neste ZIP.
+- Evite instalar a pasta em Program Files, pois o AIA grava arquivos locais como a Meta ativa.
+- AIA_META_ATIVA.json e criado ao salvar uma Meta; mantenha-o junto ao programa para preservar a Meta entre aberturas.
+- Esta RC não implementa API; o schema e os snapshots foram preparados para uma integração futura.

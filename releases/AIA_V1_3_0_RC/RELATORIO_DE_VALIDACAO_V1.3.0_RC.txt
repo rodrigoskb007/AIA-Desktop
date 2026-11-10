@@ -1,0 +1,21 @@
+RELATÓRIO DE VALIDAÇÃO — AIA V1.3.0 RC
+
+Validação automatizada: 31/31 verificações aprovadas.
+Smoke test de interface: 10/10 módulos percorridos sem erro (Operação, Dashboard,
+Gráficos, Comparação, Técnica, Defeitos, Engenharia, Calibração, Expectativa e Auditoria).
+Cobertura controlada:
+- sintaxe e importação do módulo;
+- identificação V1.3.0 RC;
+- independência entre C e D-I;
+- D-O estimado por linha sem compensação entre inspeções;
+- D-O explícito por Correspondentes;
+- FP e FN simultâneos na mesma inspeção;
+- abertura de projetos JSON V1.3 e de projetos legados;
+- entrada TP-D, FP-D e FN-D com preservação dos totais D-O;
+- CSV AIA exportado e reaberto com registros e metadados preservados;
+- geração de PDF com Dados Registrados.
+- perfis de meta D-I;
+- bindings das telas, importação, exportações, auditoria e motores.
+
+Limite desta validação:
+- A validação final de campo deve incluir importação de planilha legada, exportação PDF/Excel/CSV e inspeção visual do PDF.

@@ -1,0 +1,19 @@
+AIA V1.3.0 RC — CHANGELOG
+
+Adicionado
+- D-I declarado e apresentado como indicador principal.
+- PDF com D-I na abertura e seção Dados Registrados.
+- Threshold/Confidence por classe de defeito e snapshot por coleta.
+- Campo Correspondentes para D-O explícito.
+- Exportações CSV/Excel com rastreabilidade por linha e auditoria.
+
+Alterado
+- D-O calcula TP-D=Correspondentes, FP-D=Detectado-Correspondentes e FN-D=Real-Correspondentes quando há pareamento explícito.
+- D-O sem pareamento explícito permanece disponível somente como ESTIMADO.
+
+Compatibilidade
+- C e D-I continuam independentes.
+- Registros e planilhas antigas permanecem compatíveis; ausência de Correspondentes não é convertida em dado explícito.
+
+Fora de escopo
+- Nenhuma API é implementada nesta RC. O schema versionado e os snapshots por linha preparam a futura integração.
