@@ -1,6 +1,6 @@
 RELATÓRIO DE VALIDAÇÃO — AIA V1.3.0 RC
 
-Validação automatizada: 31/31 verificações aprovadas.
+Validação automatizada: 32/32 verificações aprovadas.
 Smoke test de interface: 10/10 módulos percorridos sem erro (Operação, Dashboard,
 Gráficos, Comparação, Técnica, Defeitos, Engenharia, Calibração, Expectativa e Auditoria).
 Cobertura controlada:
@@ -13,6 +13,7 @@ Cobertura controlada:
 - abertura de projetos JSON V1.3 e de projetos legados;
 - entrada TP-D, FP-D e FN-D com preservação dos totais D-O;
 - CSV AIA exportado e reaberto com registros e metadados preservados;
+- catálogo global, normalização Poro → Porosidade e persistência de tipos no CSV;
 - geração de PDF com Dados Registrados.
 - perfis de meta D-I;
 - bindings das telas, importação, exportações, auditoria e motores.

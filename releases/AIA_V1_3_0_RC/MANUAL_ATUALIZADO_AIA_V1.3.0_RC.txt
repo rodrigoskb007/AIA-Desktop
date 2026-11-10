@@ -1,0 +1,56 @@
+AIA V1.3.0 RC — MANUAL ATUALIZADO
+===================================
+
+STATUS DA BUILD
+Esta é uma Release Candidate. A V1.2.0 Oficial continua congelada e não é alterada por este pacote.
+
+INDICADOR PRINCIPAL
+D-I (detecção por inspeção) é a referência operacional do AIA:
+Real > 0 × Detectado > 0, com unidade de análise igual a inspeção.
+C mede a decisão OK/NOK e D-O mede ocorrências; ambos são complementares e não substituem D-I.
+
+CONFIGURAÇÃO POR CLASSE
+Na tela COLETA / OPERAÇÃO, use “Configurar Threshold/Confidence por classe”.
+Cadastre cada classe de defeito com Threshold, Confidence e observação independentes.
+Ao registrar ou atualizar uma inspeção, o AIA grava um snapshot da configuração ativa na linha.
+
+COLETA RÁPIDA, PIN E CATÁLOGO GLOBAL
+A Coleta Rápida é o ponto principal para criar uma inspeção. Leia ou digite o PIN/identificação:
+ele começa vazio a cada registro e não é substituído por numeração automática. Informe TP-D, FP-D e
+FN-D; o AIA calcula os totais físicos. Tipos de defeito são opcionais e servem para rastreabilidade.
+Digite a primeira letra no campo de tipo para filtrar o catálogo global, adicione quantos tipos forem
+necessários e inclua um novo nome quando ele ainda não existir. O catálogo é compartilhado entre
+projetos neste computador. “Poro” é registrado como “Porosidade”. Para catalogar depois, selecione
+a inspeção e use CATALOGAR TIPOS. Tipos não alteram C, D-I, TP-D, FP-D ou FN-D.
+
+EXCLUSÃO EM LOTE
+Na tabela, use Ctrl+clique para selecionar várias inspeções ou SELECIONAR TODAS para marcar a
+coleta inteira. EXCLUIR SELECIONADAS mostra a quantidade e os PINs antes de confirmar a remoção.
+
+CORRESPONDENTES D-O
+Selecione uma inspeção e use “Registrar Correspondentes D-O”. Informe quantas detecções foram
+explicitamente pareadas a defeitos reais. O sistema calcula:
+TP-D = Correspondentes; FP-D = Detectado - Correspondentes; FN-D = Real - Correspondentes.
+Assim, FP e FN podem coexistir na mesma inspeção. Sem Correspondentes, a regra por contagem é
+mantida apenas como ESTIMADO e indicada nas telas e exportações.
+
+RELATÓRIO E EXPORTAÇÕES
+O PDF começa por D-I, seguido de D-O e C como camadas complementares. A seção Dados Registrados
+lista as linhas que originaram o resultado, inclusive Correspondentes e snapshot por classe.
+Excel e CSV possuem Dados Registrados, Configuração por Classe e Auditoria.
+
+COMPATIBILIDADE
+Projetos, linhas de coleta e planilhas sem os campos novos continuam válidos. Linhas antigas sem
+Correspondentes permanecem analisáveis, sempre identificadas como D-O ESTIMADO.
+
+ABRIR PROJETO JSON
+Use ABRIR JSON no cabeçalho para restaurar um projeto salvo pelo AIA. O carregamento valida o formato
+antes de alterar a tela e pede confirmação se houver uma coleta aberta. São restaurados metadados,
+inspeções, Correspondentes, snapshots por classe, histórico de calibração, projeto e meta D-I.
+
+INSTALAÇÃO E USO
+1. Extraia a pasta completa em local gravável.
+2. Execute INSTALAR_DEPENDENCIAS_AIA.bat.
+3. Execute VALIDAR_AIA.bat.
+4. Execute CRIAR_ATALHO_DESKTOP.bat.
+5. Abra pelo atalho AIA V1.3.0 RC ou por INICIAR_AIA.bat.

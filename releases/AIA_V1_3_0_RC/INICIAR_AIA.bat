@@ -3,15 +3,15 @@ setlocal
 cd /d "%~dp0"
 title AIA V1.3.0 RC
 
-where python >nul 2>&1
+where pythonw >nul 2>&1
 if %errorlevel%==0 (
-    python "AIA_V1_3_0_RC.py"
+    start "" /b pythonw "AIA_V1_3_0_RC.py"
     goto :end
 )
 
-where py >nul 2>&1
+where pyw >nul 2>&1
 if %errorlevel%==0 (
-    py -3 "AIA_V1_3_0_RC.py"
+    start "" /b pyw -3 "AIA_V1_3_0_RC.py"
     goto :end
 )
 

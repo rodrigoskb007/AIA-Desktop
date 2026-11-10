@@ -74,6 +74,11 @@ ok("Projeto JSON V1.3 restaurável", payload["rows"][0]["correspondentes"]==3 an
 legacy=mod.aia_v130_validate_project_payload({"metadata":{},"rows":[{"id":"L1","real":1,"det":1}],"history":[],"comparison_archive":[],"calibration_history":[]})
 ok("Projeto JSON legado compatível", legacy["rows"][0]["id"]=="L1" and legacy["class_thresholds"]=={}, str(legacy))
 
+# Catálogo global: tipos são rastreáveis, não mudam D-O e Poro vira Porosidade.
+catalog=mod.aia_v130_sorted_catalog(["Poro", "Risco", "Tipo especial"])
+row_catalog=mod.normalize_row({"id":"CAT1","real":1,"det":1,"defect_types":["Poro", "Risco", "Poro"]})
+ok("Catálogo global normaliza Poro", "Porosidade" in catalog and row_catalog["defect_types"]==["Porosidade","Risco"], str(row_catalog))
+
 # CSV da própria aplicação deve voltar por ABRIR EXCEL/CSV com metadados e D-O.
 class Var:
     def __init__(self, value=""): self.value=value
@@ -82,7 +87,7 @@ class Var:
 class Status:
     def set(self, _value): pass
 meta_keys=("cliente","local","projeto","linha","tecnico","data","threshold","gabarito")
-csv_source=SimpleNamespace(rows=[mod.normalize_row({"id":"CSV1","vision":"NOK","ref":"Defeito confirmado","real":2,"det":3,"correspondentes":1,"detection_observed":True,"obs":"teste CSV"})],class_thresholds={"TRINCA":{"threshold":"80","confidence":"","notes":""}},meta={k:Var("Projeto CSV" if k=="projeto" else "") for k in meta_keys},status=Status())
+csv_source=SimpleNamespace(rows=[mod.normalize_row({"id":"CSV1","vision":"NOK","ref":"Defeito confirmado","real":2,"det":3,"correspondentes":1,"detection_observed":True,"obs":"teste CSV","defect_types":["Risco","Porosidade"]})],class_thresholds={"TRINCA":{"threshold":"80","confidence":"","notes":""}},meta={k:Var("Projeto CSV" if k=="projeto" else "") for k in meta_keys},status=Status())
 csv_source.detection_for_row=MethodType(mod._aia_v130_detection_for_row,csv_source)
 with tempfile.TemporaryDirectory() as temp_dir:
     csv_path=Path(temp_dir)/"aia.csv"
@@ -95,7 +100,7 @@ with tempfile.TemporaryDirectory() as temp_dir:
     mod.messagebox.showinfo=lambda *args,**kwargs:None; mod.messagebox.showerror=lambda *args,**kwargs:None
     try: mod._aia_v130_import_csv(csv_target,str(csv_path))
     finally: mod.messagebox.showinfo=old_info; mod.messagebox.showerror=old_error
-    ok("CSV AIA reabre com dados", len(csv_target.rows)==1 and csv_target.rows[0]["id"]=="CSV1" and csv_target.rows[0]["correspondentes"]==1 and csv_target.meta["projeto"].get()=="Projeto CSV", str(csv_target.rows))
+    ok("CSV AIA reabre com dados", len(csv_target.rows)==1 and csv_target.rows[0]["id"]=="CSV1" and csv_target.rows[0]["correspondentes"]==1 and csv_target.rows[0]["defect_types"]==["Risco","Porosidade"] and csv_target.meta["projeto"].get()=="Projeto CSV", str(csv_target.rows))
 
 # PDF deve ser produzido com a tabela de registros em página paisagem.
 pdf_source=SimpleNamespace(rows=csv_source.rows,class_thresholds=csv_source.class_thresholds,status=Status())

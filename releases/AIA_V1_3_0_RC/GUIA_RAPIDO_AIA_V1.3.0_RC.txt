@@ -1,0 +1,10 @@
+AIA V1.3.0 RC — GUIA RÁPIDO
+1. Preencha o contexto da coleta.
+2. Configure Threshold/Confidence por classe quando aplicável.
+3. Clique em COLETA RÁPIDA, leia ou digite o PIN e informe TP-D, FP-D e FN-D.
+4. Opcionalmente, digite a primeira letra do tipo de defeito, selecione-o no catálogo e use Adicionar tipo. É possível registrar vários tipos.
+5. Para completar tipos depois, selecione uma linha e clique em CATALOGAR TIPOS. Isso não altera os cálculos.
+6. Para remover registros, selecione uma ou várias linhas (Ctrl+clique), use SELECIONAR TODAS quando necessário e clique em EXCLUIR SELECIONADAS.
+7. Consulte D-I como indicador principal no Dashboard, Técnica e PDF.
+8. Exporte PDF, Excel ou CSV; confira Dados Registrados e Auditoria.
+9. Antes de liberar resultados, execute VALIDAR_AIA.bat.

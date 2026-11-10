@@ -25,6 +25,14 @@ from datetime import datetime
 from collections import defaultdict
 import json, math, csv, re, unicodedata, os, sys, hashlib
 
+if os.name == "nt":
+    try:
+        # Evita o agrupamento/ícone do interpretador Python na barra de tarefas.
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Autaza.AIA.V130RC")
+    except Exception:
+        pass
+
 try:
     import openpyxl
 except Exception:
@@ -251,7 +259,7 @@ def blank_row():
         "real": 0, "det": 0,
         "tp": 0, "vn": 0, "fp": 0, "fn": 0,
         "obs": "", "calc_status": "N/D",
-        "defects": [], "source": "Manual",
+        "defects": [], "defect_types": [], "source": "Manual",
         # A linha vazia não é uma observação válida até o usuário salvar a inspeção.
         "detection_observed": False, "detection_explicit_matrix": False,
         "tp_d": None, "fp_d": None, "fn_d": None
@@ -381,10 +389,11 @@ class App(tk.Tk):
             if not icon_ico.exists():
                 icon_ico = self.asset_dir / "AIA_V1_2_0.ico"
             if os.name == "nt" and icon_ico.exists():
-                self.iconbitmap(str(icon_ico))
+                self.iconbitmap(default=str(icon_ico))
             icon = self.asset_dir / "autaza_icon.png"
-            self.icon_img = tk.PhotoImage(file=str(icon))
-            self.iconphoto(True, self.icon_img)
+            if icon.exists():
+                self.icon_img = tk.PhotoImage(file=str(icon))
+                self.iconphoto(True, self.icon_img)
         except Exception:
             pass
         self.build_shell()
@@ -1394,16 +1403,29 @@ class App(tk.Tk):
             dtt.insert("", "end",values=(d["type"],d["real"],d["det"]))
         addbar=tk.Frame(sec,bg=PANEL);addbar.pack(fill="x",padx=10,pady=6)
         tv=tk.StringVar();rv=tk.StringVar(value="0");dv=tk.StringVar(value="0")
-        ttk.Entry(addbar,textvariable=tv,width=35).pack(side="left",padx=3)
+        type_catalog=getattr(self,"defect_catalog",AIA_V130_DEFAULT_DEFECT_CATALOG)
+        type_box=ttk.Combobox(addbar,textvariable=tv,values=type_catalog,width=35,state="normal")
+        type_box.pack(side="left",padx=3)
+        def filter_defect_catalog(event=None):
+            prefix=normalize_defect(tv.get())
+            matches=[item for item in getattr(self,"defect_catalog",type_catalog) if not prefix or normalize_defect(item).startswith(prefix)]
+            type_box["values"]=matches or getattr(self,"defect_catalog",type_catalog)
+            if prefix and matches and event is not None and event.keysym not in ("Up","Down","Return","Escape","Tab"):
+                try: type_box.event_generate("<Down>")
+                except tk.TclError: pass
+        type_box.bind("<KeyRelease>",filter_defect_catalog)
         ttk.Entry(addbar,textvariable=rv,width=8).pack(side="left",padx=3)
         ttk.Entry(addbar,textvariable=dv,width=8).pack(side="left",padx=3)
         def add_def():
-            name=normalize_defect(tv.get())
+            display=aia_v130_catalog_display(tv.get(),getattr(self,"defect_catalog",type_catalog))
+            name=normalize_defect(display)
             if not name:return
             try: rr=max(0,int(float(rv.get() or 0)));dd=max(0,int(float(dv.get() or 0)))
             except ValueError:
                 messagebox.showerror("Defeito","Real e detectado devem ser numéricos.",parent=win);return
             dtt.insert("", "end",values=(name,rr,dd))
+            self.defect_catalog=aia_v130_add_catalog_defect(getattr(self,"defect_catalog",type_catalog),display)
+            type_box["values"]=self.defect_catalog
             tv.set("");rv.set("0");dv.set("0")
             _sync()
         ttk.Button(addbar,text="+ Adicionar tipo",command=add_def).pack(side="left",padx=5)
@@ -1411,7 +1433,7 @@ class App(tk.Tk):
             for iid in dtt.selection(): dtt.delete(iid)
             _sync()
         ttk.Button(addbar,text="Excluir selecionado",command=remove_def).pack(side="right",padx=5)
-        tk.Label(addbar,text="Tipo | Real | Detectado",bg=PANEL,fg=MUTED,
+        tk.Label(addbar,text="Catálogo global: Tipo | Real | Detectado",bg=PANEL,fg=MUTED,
                  font=("Segoe UI",8)).pack(side="left",padx=5)
         _sync()
 
@@ -3658,9 +3680,10 @@ def _aia_v10_final_operacao(self):
                          bd=0,highlightbackground="#3C7B95",highlightthickness=1,
                          padx=13,pady=8,font=("Segoe UI",8,"bold"),cursor="hand2")
     for text,cmd,accent in [
-        ("＋ NOVA INSPEÇÃO",self.add_row,True),("↻ NOVA COLETA",self.new_collection,False),
-        ("⚡ COLETA RÁPIDA",self.quick_entry,True),("DETALHAR DEFEITOS",self.edit_row,False),
-        ("✕ EXCLUIR INSPEÇÃO",self.delete_row,False),("⟳ RECALCULAR",self.refresh_all,False)]:
+        ("⚡ COLETA RÁPIDA",self.quick_entry,True),("EDITAR / DEFEITOS",self.edit_row,False),
+        ("CATALOGAR TIPOS",self.catalog_defect_types,False),("SELECIONAR TODAS",self.select_all_rows,False),
+        ("LIMPAR",self.clear_row_selection,False),("✕ EXCLUIR",self.delete_row,False),
+        ("↻ NOVA COLETA",self.new_collection,False),("⟳ RECALCULAR",self.refresh_all,False)]:
         button(text,cmd,accent).pack(side="left",padx=3)
 
     group=tk.Frame(self.content,bg=BG);group.pack(fill="x",pady=(4,2))
@@ -3675,7 +3698,7 @@ def _aia_v10_final_operacao(self):
     table.pack(fill="both",expand=True,pady=5)
     cols=("n","id","vision","ref","real","det","tp","vn","fp","fn","dtp","dfp","dfn","def","status")
     heads=("Nº","Identificação","Vision","Referência","Real","Detectado","TP-C","VN-C","FP-C","FN-C","TP-D","FP-D","FN-D","Detalhes","Motor")
-    self.tree=ttk.Treeview(table,columns=cols,show="headings")
+    self.tree=ttk.Treeview(table,columns=cols,show="headings",selectmode="extended")
     widths={"n":48,"id":105,"vision":70,"ref":125,"real":60,"det":70,"tp":55,"vn":55,"fp":55,"fn":55,"dtp":55,"dfp":55,"dfn":55,"def":90,"status":135}
     for c,h in zip(cols,heads):self.tree.heading(c,text=h);self.tree.column(c,width=widths.get(c,80),anchor="center")
     self.tree.pack(fill="both",expand=True,padx=10,pady=10);self.tree.bind("<Double-1>",lambda e:self.edit_row());self.refresh_table()
@@ -7729,6 +7752,63 @@ for _method_name, _implementation in FINAL_RUNTIME_BINDINGS.items():
 
 _aia_v130_normalize_row_base = normalize_row
 
+# Catálogo global: os nomes ficam disponíveis para qualquer projeto e não
+# interferem nas quantidades de D-O. "Poro" é normalizado para Porosidade.
+AIA_V130_DEFAULT_DEFECT_CATALOG = [
+    "Alcatrão", "Amassado", "Caroço", "Fervura", "Fiapo", "Rejeição",
+    "Sujeira", "Raspa", "Cratera", "Contaminação Sealer", "Respingo",
+    "Furo", "Porosidade", "Falta Fusão", "Semente", "Risco",
+    "Casca de Laranja", "Serrilhado", "Solda Funda", "Batida",
+    "Falta de Material", "Fissura", "Escorrido", "Fio de Cabelo",
+]
+
+def aia_v130_catalog_path():
+    root = Path(os.environ.get("APPDATA") or application_dir()) / "Autaza Inspection Analytics"
+    return root / "catalogo_defeitos.json"
+
+def aia_v130_catalog_display(value, catalog=None):
+    raw=str(value or "").strip()
+    key=normalize_defect(raw)
+    if key == "PORO": key="POROSIDADE"
+    if not key: return ""
+    choices=list(catalog or AIA_V130_DEFAULT_DEFECT_CATALOG)
+    for choice in choices:
+        candidate=normalize_defect(choice)
+        if candidate == "PORO": candidate="POROSIDADE"
+        if candidate == key: return choice
+    if key == "POROSIDADE": return "Porosidade"
+    return raw
+
+def aia_v130_sorted_catalog(values):
+    unique={}
+    for value in list(AIA_V130_DEFAULT_DEFECT_CATALOG)+list(values or []):
+        display=aia_v130_catalog_display(value, list(AIA_V130_DEFAULT_DEFECT_CATALOG)+list(values or []))
+        key=normalize_defect(display)
+        if key == "PORO": key="POROSIDADE"
+        if key and key not in unique: unique[key]=display
+    return sorted(unique.values(), key=lambda item: normalize_text(item))
+
+def aia_v130_load_defect_catalog():
+    try:
+        payload=json.loads(aia_v130_catalog_path().read_text(encoding="utf-8"))
+        items=payload.get("defects", []) if isinstance(payload, dict) else payload
+        return aia_v130_sorted_catalog(items if isinstance(items, list) else [])
+    except (OSError, json.JSONDecodeError):
+        return aia_v130_sorted_catalog([])
+
+def aia_v130_save_defect_catalog(catalog):
+    try:
+        path=aia_v130_catalog_path(); path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"schema":"AIA-DEFECT-CATALOG-1","defects":aia_v130_sorted_catalog(catalog)}, ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError:
+        # A coleta não pode ser bloqueada se o Windows impedir gravar o catálogo.
+        pass
+
+def aia_v130_add_catalog_defect(catalog, value):
+    updated=aia_v130_sorted_catalog(list(catalog or [])+[value])
+    aia_v130_save_defect_catalog(updated)
+    return updated
+
 def aia_v130_normalize_row(row):
     """Normaliza registros novos e antigos sem alterar sua semântica histórica."""
     x = _aia_v130_normalize_row_base(row)
@@ -7749,6 +7829,17 @@ def aia_v130_normalize_row(row):
         normalized.append({"type": d["type"], "real": d["real"], "det": d["det"],
                            "correspondentes": match})
     x["defects"] = normalized
+    raw_types = (row or {}).get("defect_types", x.get("defect_types", []))
+    if isinstance(raw_types, str):
+        raw_types = [part.strip() for part in raw_types.split(",") if part.strip()]
+    if not isinstance(raw_types, list): raw_types=[]
+    type_seen=set(); type_values=[]
+    for item in raw_types:
+        display=aia_v130_catalog_display(item)
+        key=normalize_defect(display)
+        if key and key not in type_seen:
+            type_seen.add(key); type_values.append(display)
+    x["defect_types"] = type_values
     return x
 
 normalize_row = aia_v130_normalize_row
@@ -7770,6 +7861,7 @@ def aia_v130_snapshot_rows(self):
 
 def _aia_v130_init(self, *args, **kwargs):
     self.class_thresholds = {}
+    self.defect_catalog = aia_v130_load_defect_catalog()
     _aia_smart_init(self, *args, **kwargs)
     self.after(120, lambda: self.status.set("AIA V1.3.0 RC • D-I PRINCIPAL • D-O CORRESPONDENTE • RASTREABILIDADE ATIVA"))
 
@@ -7892,51 +7984,146 @@ def _aia_v130_configure_classes(self):
 _aia_v130_view_operacao_base = _aia_v10_final_operacao
 
 def _aia_v130_quick_entry(self):
-    win=tk.Toplevel(self); win.title("Coleta rápida — D-O explícito"); win.geometry("680x720"); win.minsize(610,650); win.configure(bg=BG); win.transient(self); win.grab_set()
+    win=tk.Toplevel(self); win.title("Coleta rápida — AIA V1.3.0 RC"); win.geometry("720x790"); win.minsize(640,680); win.configure(bg=BG); win.transient(self); win.grab_set()
     frame=tk.Frame(win,bg=PANEL,highlightbackground=BORDER,highlightthickness=1); frame.pack(fill="both",expand=True,padx=15,pady=15)
-    tk.Label(frame,text="COLETA RÁPIDA",bg=PANEL,fg=TEXT,font=("Segoe UI",17,"bold")).pack(anchor="w",padx=18,pady=(16,2))
-    tk.Label(frame,text="Registre TP-D, FP-D e FN-D conforme confirmado pelo operador. O AIA calcula os totais físicos para preservar D-I e D-O.",bg=PANEL,fg=MUTED,wraplength=610,justify="left").pack(anchor="w",padx=18,pady=(0,12))
-    values={}
+    footer=tk.Frame(frame,bg=PANEL); footer.pack(side="bottom",fill="x",padx=18,pady=12)
+    canvas=tk.Canvas(frame,bg=PANEL,highlightthickness=0,bd=0)
+    scrollbar=ttk.Scrollbar(frame,orient="vertical",command=canvas.yview); canvas.configure(yscrollcommand=scrollbar.set)
+    scrollbar.pack(side="right",fill="y",pady=(5,0)); canvas.pack(side="left",fill="both",expand=True)
+    body=tk.Frame(canvas,bg=PANEL); body_id=canvas.create_window((0,0),window=body,anchor="nw")
+    body.bind("<Configure>",lambda _event: canvas.configure(scrollregion=canvas.bbox("all")))
+    canvas.bind("<Configure>",lambda event: canvas.itemconfigure(body_id,width=event.width))
+    def scroll(event):
+        canvas.yview_scroll(-1 * int(event.delta / 120), "units")
+    canvas.bind("<MouseWheel>",scroll); body.bind("<MouseWheel>",scroll)
+    tk.Label(body,text="COLETA RÁPIDA",bg=PANEL,fg=TEXT,font=("Segoe UI",17,"bold")).pack(anchor="w",padx=18,pady=(16,2))
+    tk.Label(body,text="Registre TP-D, FP-D e FN-D conforme confirmado pelo operador. O AIA calcula os totais físicos para preservar D-I e D-O.",bg=PANEL,fg=MUTED,wraplength=610,justify="left").pack(anchor="w",padx=18,pady=(0,12))
+    values={}; selected_types=[]
     def field(label,key,default="",options=None):
-        row=tk.Frame(frame,bg=PANEL);row.pack(fill="x",padx=18,pady=4)
+        row=tk.Frame(body,bg=PANEL);row.pack(fill="x",padx=18,pady=4)
         tk.Label(row,text=label,bg=PANEL,fg=MUTED,font=("Segoe UI",8,"bold")).pack(anchor="w")
         var=tk.StringVar(value=default);values[key]=var
         widget=ttk.Combobox(row,textvariable=var,values=options,state="readonly") if options else ttk.Entry(row,textvariable=var)
         widget.pack(fill="x")
-    field("Identificação","id",self._next_numeric_id()); field("Vision AI","vision","OK",["OK","NOK"]); field("Referência / gabarito","ref","Não determinado",REFS)
-    section=tk.Frame(frame,bg="#103126",highlightbackground=GOOD,highlightthickness=1);section.pack(fill="x",padx=18,pady=(10,5))
+        return widget
+    pin_entry=field("PIN / identificação do item inspecionado","id","")
+    tk.Label(body,text="Digite ou leia o PIN. O campo fica vazio para cada nova coleta e preserva exatamente o código informado.",bg=PANEL,fg=MUTED,font=("Segoe UI",8)).pack(anchor="w",padx=18,pady=(0,3))
+    field("Vision AI","vision","OK",["OK","NOK"]); field("Referência / gabarito","ref","Não determinado",REFS)
+    section=tk.Frame(body,bg="#103126",highlightbackground=GOOD,highlightthickness=1);section.pack(fill="x",padx=18,pady=(10,5))
     tk.Label(section,text="DETECÇÃO POR OCORRÊNCIA — D-O",bg="#103126",fg=GOOD,font=("Segoe UI",10,"bold")).pack(anchor="w",padx=10,pady=(7,1))
     tk.Label(section,text="TP-D = defeitos corretamente detectados • FP-D = alarmes sem defeito real • FN-D = defeitos reais que o Vision AI deixou passar",bg="#103126",fg=TEXT,font=("Segoe UI",8),wraplength=590,justify="left").pack(anchor="w",padx=10,pady=(0,7))
     field("Defeitos corretamente detectados (TP-D)","tp_d","0"); field("Falsos positivos confirmados pelo operador (FP-D)","fp_d","0"); field("Falsos negativos confirmados pelo operador (FN-D)","fn_d","0")
     derived=tk.StringVar(value="Totais calculados: Defeitos reais existentes = 0   •   Defeitos detectados pelo Vision AI = 0")
-    tk.Label(frame,textvariable=derived,bg="#123B52",fg=ACCENT2,font=("Segoe UI",9,"bold"),justify="left",anchor="w",padx=10,pady=8).pack(fill="x",padx=18,pady=(5,4))
+    tk.Label(body,textvariable=derived,bg="#123B52",fg=ACCENT2,font=("Segoe UI",9,"bold"),justify="left",anchor="w",padx=10,pady=8).pack(fill="x",padx=18,pady=(5,4))
     def update_totals(*_):
         try:
             tp=max(0,int(values["tp_d"].get() or 0));fp=max(0,int(values["fp_d"].get() or 0));fn=max(0,int(values["fn_d"].get() or 0))
             derived.set(f"Totais calculados: Defeitos reais existentes = {tp+fn}   •   Defeitos detectados pelo Vision AI = {tp+fp}")
         except ValueError: derived.set("Informe TP-D, FP-D e FN-D como números inteiros não negativos.")
     for key in ("tp_d","fp_d","fn_d"): values[key].trace_add("write",update_totals)
+    catalog_box=tk.Frame(body,bg="#0A2635",highlightbackground=ACCENT2,highlightthickness=1);catalog_box.pack(fill="x",padx=18,pady=(7,4))
+    tk.Label(catalog_box,text="TIPOS DE DEFEITO — OPCIONAL",bg="#0A2635",fg=ACCENT2,font=("Segoe UI",10,"bold")).pack(anchor="w",padx=10,pady=(7,1))
+    tk.Label(catalog_box,text="Digite a inicial para ver os tipos do catálogo global. Adicione mais de um tipo quando necessário; isto não altera os cálculos TP-D, FP-D e FN-D.",bg="#0A2635",fg=TEXT,font=("Segoe UI",8),wraplength=630,justify="left").pack(anchor="w",padx=10,pady=(0,6))
+    type_row=tk.Frame(catalog_box,bg="#0A2635");type_row.pack(fill="x",padx=10,pady=(0,5))
+    type_value=tk.StringVar(); type_combo=ttk.Combobox(type_row,textvariable=type_value,values=self.defect_catalog,state="normal")
+    type_combo.pack(side="left",fill="x",expand=True)
+    selected_label=tk.StringVar(value="Nenhum tipo catalogado nesta inspeção.")
+    def refresh_catalog_values(event=None):
+        typed=type_value.get().strip(); key=normalize_defect(typed)
+        matches=[name for name in self.defect_catalog if not key or normalize_defect(name).startswith(key)]
+        type_combo["values"]=matches or self.defect_catalog
+        if typed and matches and event is not None and event.keysym not in ("Up","Down","Return","Escape","Tab"):
+            try: type_combo.event_generate("<Down>")
+            except tk.TclError: pass
+    type_combo.bind("<KeyRelease>",refresh_catalog_values)
+    def render_types():
+        selected_label.set("Tipos catalogados: " + ", ".join(selected_types) if selected_types else "Nenhum tipo catalogado nesta inspeção.")
+    def add_type():
+        name=aia_v130_catalog_display(type_value.get(), self.defect_catalog)
+        if not name: messagebox.showinfo("Tipo de defeito","Digite ou selecione um tipo de defeito.",parent=win); return
+        self.defect_catalog=aia_v130_add_catalog_defect(self.defect_catalog,name)
+        if name not in selected_types: selected_types.append(name)
+        type_value.set(""); type_combo["values"]=self.defect_catalog; render_types()
+    def remove_last_type():
+        if selected_types: selected_types.pop(); render_types()
+    ttk.Button(type_row,text="Adicionar tipo",command=add_type).pack(side="left",padx=(6,0))
+    ttk.Button(type_row,text="Remover último",command=remove_last_type).pack(side="left",padx=(4,0))
+    tk.Label(catalog_box,textvariable=selected_label,bg="#0A2635",fg=ACCENT2,font=("Segoe UI",8,"bold"),wraplength=630,justify="left").pack(anchor="w",padx=10,pady=(0,7))
     field("Observação","obs","")
-    btns=tk.Frame(frame,bg=PANEL);btns.pack(fill="x",padx=18,pady=15)
     def collect(next_one=False):
         try:
             tp=max(0,int(values["tp_d"].get() or 0));fp=max(0,int(values["fp_d"].get() or 0));fn=max(0,int(values["fn_d"].get() or 0))
         except ValueError: messagebox.showerror("Dados","TP-D, FP-D e FN-D devem ser números inteiros não negativos.",parent=win);return
-        ident=values["id"].get().strip() or self._next_numeric_id()
+        ident=values["id"].get().strip()
+        if not ident: messagebox.showerror("PIN / identificação","Informe ou leia o PIN/identificação do item inspecionado.",parent=win); pin_entry.focus_set(); return
         if self._id_exists(ident): messagebox.showerror("Identificação duplicada",f"A identificação '{ident}' já existe nesta coleta.",parent=win);return
-        r=blank_row(); r.update({"id":ident,"vision":values["vision"].get() or "OK","ref":values["ref"].get() or "Não determinado","real":tp+fn,"det":tp+fp,"correspondentes":tp,"tp_d":tp,"fp_d":fp,"fn_d":fn,"detection_explicit_matrix":True,"obs":values["obs"].get().strip(),"source":"Manual — Coleta rápida D-O explícita","detection_observed":True})
+        r=blank_row(); r.update({"id":ident,"vision":values["vision"].get() or "OK","ref":values["ref"].get() or "Não determinado","real":tp+fn,"det":tp+fp,"correspondentes":tp,"tp_d":tp,"fp_d":fp,"fn_d":fn,"detection_explicit_matrix":True,"obs":values["obs"].get().strip(),"source":"Manual — Coleta rápida D-O explícita","detection_observed":True,"defect_types":list(selected_types)})
         self.rows.append(self.classify(r)); self.source_file=""; aia_v130_snapshot_rows(self); self.refresh_all(); self.status.set(f"✓ Inspeção {ident} registrada.")
         if next_one:
-            values["id"].set(self._next_numeric_id());values["vision"].set("OK");values["ref"].set("Não determinado");values["tp_d"].set("0");values["fp_d"].set("0");values["fn_d"].set("0");values["obs"].set("")
+            values["id"].set("");values["vision"].set("OK");values["ref"].set("Não determinado");values["tp_d"].set("0");values["fp_d"].set("0");values["fn_d"].set("0");values["obs"].set("");selected_types.clear();render_types();pin_entry.focus_set()
         else: win.destroy()
-    ttk.Button(btns,text="Registrar e fechar",command=lambda:collect(False)).pack(side="right",padx=4)
-    ttk.Button(btns,text="Registrar e próxima",style="Accent.TButton",command=lambda:collect(True)).pack(side="right",padx=4)
+    ttk.Button(footer,text="Registrar e fechar",command=lambda:collect(False)).pack(side="right",padx=4)
+    ttk.Button(footer,text="Registrar e próxima",style="Accent.TButton",command=lambda:collect(True)).pack(side="right",padx=4)
+    win.after_idle(pin_entry.focus_set)
 
 def _aia_v130_view_operacao(self):
     _aia_v130_view_operacao_base(self)
     bar = tk.Frame(self.content, bg=BG); bar.pack(fill="x", pady=(0, 5))
     ttk.Button(bar, text="Configurar Threshold/Confidence por classe", command=lambda: _aia_v130_configure_classes(self)).pack(side="left", padx=3)
     tk.Label(bar, text="D-I é o indicador principal. Em D-O, registre TP-D, FP-D e FN-D; os totais são calculados automaticamente.", bg=BG, fg=ACCENT2, font=("Segoe UI", 8, "bold")).pack(side="left", padx=8)
+
+def _aia_v130_select_all_rows(self):
+    if getattr(self, "tree", None):
+        self.tree.selection_set(self.tree.get_children())
+
+def _aia_v130_clear_row_selection(self):
+    if getattr(self, "tree", None):
+        self.tree.selection_remove(self.tree.selection())
+
+def _aia_v130_delete_selected_rows(self):
+    if not getattr(self,"tree",None): return
+    selected=self.tree.selection()
+    if not selected:
+        messagebox.showinfo("Excluir inspeções", "Selecione uma ou mais inspeções na tabela.", parent=self); return
+    indexes=sorted({int(item) for item in selected}, reverse=True)
+    pins=[str(normalize_row(self.rows[index]).get("id") or f"linha {index+1}") for index in sorted(indexes)]
+    preview=", ".join(pins[:8])
+    if len(pins)>8: preview += f" e mais {len(pins)-8}"
+    if not messagebox.askyesno("Excluir inspeções selecionadas", f"Excluir {len(indexes)} inspeção(ões)?\n\nPINs/identificações: {preview}\n\nEsta ação não pode ser desfeita.", parent=self): return
+    for index in indexes: self.rows.pop(index)
+    self.refresh_all()
+    self.status.set(f"{len(indexes)} inspeção(ões) excluída(s).")
+
+def _aia_v130_catalog_defect_types(self):
+    if not getattr(self,"tree",None) or len(self.tree.selection()) != 1:
+        messagebox.showinfo("Catalogar tipos", "Selecione uma única inspeção para catalogar seus tipos de defeito.", parent=self); return
+    index=int(self.tree.selection()[0]); row=normalize_row(self.rows[index]); selected=list(row.get("defect_types", []))
+    win=tk.Toplevel(self); win.title("Catalogar tipos de defeito"); win.geometry("650x430"); win.minsize(560,370); win.configure(bg=BG); win.transient(self); win.grab_set()
+    box=tk.Frame(win,bg=PANEL,padx=18,pady=18);box.pack(fill="both",expand=True,padx=12,pady=12)
+    tk.Label(box,text=f"TIPOS DE DEFEITO — {row['id'] or 'sem identificação'}",bg=PANEL,fg=TEXT,font=("Segoe UI",14,"bold")).pack(anchor="w")
+    tk.Label(box,text="Inclua os tipos observados agora ou posteriormente. Eles são apenas catálogo/rastreabilidade e não alteram TP-D, FP-D, FN-D nem os indicadores.",bg=PANEL,fg=MUTED,wraplength=590,justify="left").pack(anchor="w",pady=(4,12))
+    value=tk.StringVar(); combo=ttk.Combobox(box,textvariable=value,values=self.defect_catalog,state="normal");combo.pack(fill="x")
+    def filter_values(event=None):
+        key=normalize_defect(value.get()); combo["values"]=[item for item in self.defect_catalog if not key or normalize_defect(item).startswith(key)] or self.defect_catalog
+    combo.bind("<KeyRelease>",filter_values)
+    list_value=tk.StringVar()
+    def render(): list_value.set("Tipos registrados: " + ", ".join(selected) if selected else "Nenhum tipo registrado ainda.")
+    def add():
+        name=aia_v130_catalog_display(value.get(),self.defect_catalog)
+        if not name: return
+        self.defect_catalog=aia_v130_add_catalog_defect(self.defect_catalog,name)
+        if name not in selected: selected.append(name)
+        value.set(""); combo["values"]=self.defect_catalog;render()
+    def remove_last():
+        if selected: selected.pop();render()
+    commands=tk.Frame(box,bg=PANEL);commands.pack(fill="x",pady=7)
+    ttk.Button(commands,text="Adicionar tipo",command=add).pack(side="left")
+    ttk.Button(commands,text="Remover último",command=remove_last).pack(side="left",padx=5)
+    tk.Label(box,textvariable=list_value,bg="#0A2635",fg=ACCENT2,wraplength=590,justify="left",anchor="nw",padx=10,pady=10).pack(fill="both",expand=True,pady=(5,10))
+    def save():
+        updated=normalize_row(self.rows[index]); updated["defect_types"]=selected; self.rows[index]=self.classify(updated); aia_v130_snapshot_rows(self); win.destroy(); self.refresh_all(); self.status.set(f"Tipos catalogados na inspeção {updated['id']}.")
+    ttk.Button(box,text="Salvar tipos",style="Accent.TButton",command=save).pack(anchor="e")
+    render(); win.after_idle(combo.focus_set)
 
 def _aia_v130_export_pdf(self):
     path = filedialog.asksaveasfilename(title="Gerar relatório executivo V1.3.0 RC", defaultextension=".pdf", filetypes=[("PDF", "*.pdf")])
@@ -7961,12 +8148,12 @@ def _aia_v130_export_pdf(self):
             t=Table(converted, colWidths=widths, repeatRows=1, splitByRow=1)
             t.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#0E202D")),("GRID",(0,0),(-1,-1),.25,colors.HexColor("#A8C6D2")),("VALIGN",(0,0),(-1,-1),"TOP"),("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3)])); return t
         story=[Paragraph("AUTAZA INSPECTION ANALYTICS", title), Paragraph("RELATÓRIO EXECUTIVO — V1.3.0 RC", body), Spacer(1,7), Paragraph("01. D-I — DETECÇÃO POR INSPEÇÃO — INDICADOR PRINCIPAL",h), Paragraph("D-I responde se uma inspeção com defeito real apresentou alguma detecção. C e D-O permanecem independentes e complementares.",body), tbl([["Indicador","Valor"],["N-DI",di.get("N","N/D")],["TP-DI",di.get("TP","N/D")],["TN-DI",di.get("TN","N/D")],["FP-DI",di.get("FP","N/D")],["FN-DI",di.get("FN","N/D")],["Accuracy D-I",pc(di.get("Accuracy"))],["Recall D-I",pc(di.get("Recall / Sensibilidade"))],["Precision D-I",pc(di.get("Precision"))],["F1 D-I",pc(di.get("F1"))],["Método",di.get("method","N/D")]], [7*cm,18*cm]), Paragraph("02. D-O — DETECÇÃO POR OCORRÊNCIA — COMPLEMENTAR",h), tbl([["Indicador","Valor"],["Ocorrências reais",do.get("real",0)],["Detecções",do.get("det",0)],["TP-D",do.get("tp",0)],["FP-D",do.get("fp",0)],["FN-D",do.get("fn",0)],["Status",do.get("status","N/D")],["Método",do.get("method","N/D")]], [7*cm,18*cm]), Paragraph("03. C — CLASSIFICAÇÃO OK/NOK — COMPLEMENTAR",h), tbl([["Indicador","Valor"],["N-C",c.get("N",0)],["TP-C",c.get("TP",0)],["TN-C",c.get("VN/TN",0)],["FP-C",c.get("FP",0)],["FN-C",c.get("FN",0)],["Accuracy C",pc(c.get("Accuracy"))]], [7*cm,18*cm]), PageBreak(), Paragraph("04. DADOS REGISTRADOS",h), Paragraph("Dados que originaram os resultados. TP-D, FP-D e FN-D são os valores de ocorrência confirmados.",body)]
-        records=[["#","ID","Vision","Referência","Real","Detectado","TP-D","FP-D","FN-D","Configuração por classe","Observação"]]
+        records=[["#","ID","Vision","Referência","Real","Detectado","TP-D","FP-D","FN-D","Tipos catalogados","Configuração por classe","Observação"]]
         for i, r0 in enumerate(self.rows,1):
             r=normalize_row(r0); cfg="; ".join(f"{k}: T={v.get('threshold','')} C={v.get('confidence','')}" for k,v in r.get("configuracao_classes_snapshot",{}).items()) or "N/D"
             d=self.detection_for_row(r)
-            records.append([i,r["id"],r["vision"],r["ref"],r["real"],r["det"],d["tp"],d["fp"],d["fn"],cfg,r["obs"]])
-        story += [tbl(records,[.75*cm,1.15*cm,.85*cm,2.0*cm,.75*cm,.95*cm,.75*cm,.75*cm,.75*cm,7.0*cm,7.3*cm]), Paragraph("05. CONFIGURAÇÃO ATIVA POR CLASSE",h)]
+            records.append([i,r["id"],r["vision"],r["ref"],r["real"],r["det"],d["tp"],d["fp"],d["fn"],"; ".join(r.get("defect_types",[])) or "—",cfg,r["obs"]])
+        story += [tbl(records,[.65*cm,1.05*cm,.8*cm,1.8*cm,.7*cm,.85*cm,.7*cm,.7*cm,.7*cm,2.4*cm,6.6*cm,6.5*cm]), Paragraph("05. CONFIGURAÇÃO ATIVA POR CLASSE",h)]
         cfgrows=[["Classe","Threshold","Confidence","Observação"]] + [[n,v.get("threshold",""),v.get("confidence",""),v.get("notes","")] for n,v in sorted(self.class_thresholds.items())]
         story.append(tbl(cfgrows,[4*cm,3*cm,3*cm,6.2*cm]))
         doc=SimpleDocTemplate(path,pagesize=landscape(A4),leftMargin=1.15*cm,rightMargin=1.15*cm,topMargin=1.1*cm,bottomMargin=1.1*cm,title="AIA V1.3.0 RC")
@@ -8040,7 +8227,7 @@ def _aia_v130_export_csv(self):
     path=filedialog.asksaveasfilename(title="Exportar CSV V1.3.0 RC",defaultextension=".csv",filetypes=[("CSV","*.csv")])
     if not path:return
     aia_v130_snapshot_rows(self)
-    headers=["Schema","Identificação","Vision AI","Referência","Real","Detectado","TP-D","FP-D","FN-D","Observação","Origem","Configuração por classe","Cliente","Local","Projeto","Linha","Técnico","Data","Threshold","Método de referência"]
+    headers=["Schema","Identificação","Vision AI","Referência","Real","Detectado","TP-D","FP-D","FN-D","Tipos catalogados","Observação","Origem","Configuração por classe","Cliente","Local","Projeto","Linha","Técnico","Data","Threshold","Método de referência"]
     with open(path,"w",newline="",encoding="utf-8-sig") as f:
         w=csv.writer(f,delimiter=";")
         w.writerow(headers)
@@ -8048,7 +8235,7 @@ def _aia_v130_export_csv(self):
         for row0 in self.rows:
             r=normalize_row(row0); d=self.detection_for_row(r); status="EXPLÍCITO" if r.get("correspondentes") is not None else "ESTIMADO"
             cfg=json.dumps(r.get("configuracao_classes_snapshot",{}),ensure_ascii=False,sort_keys=True)
-            values=["AIA-1.3.0-RC",r["id"],r["vision"],r["ref"],r["real"],r["det"],d["tp"],d["fp"],d["fn"],r["obs"],r["source"],cfg,meta["Cliente"],meta["Local"],meta["Projeto"],meta["Linha"],meta["Técnico"],meta["Data"],meta["Threshold"],meta["Método de referência"]]
+            values=["AIA-1.3.0-RC",r["id"],r["vision"],r["ref"],r["real"],r["det"],d["tp"],d["fp"],d["fn"]," | ".join(r.get("defect_types",[])),r["obs"],r["source"],cfg,meta["Cliente"],meta["Local"],meta["Projeto"],meta["Linha"],meta["Técnico"],meta["Data"],meta["Threshold"],meta["Método de referência"]]
             w.writerow(values)
     self.status.set(f"CSV importável exportado: {Path(path).name}"); messagebox.showinfo("Exportação", "CSV tabular criado. Use ABRIR EXCEL para reabrir este CSV no AIA.", parent=self)
 
@@ -8079,7 +8266,8 @@ def _aia_v130_import_csv(self, path):
             if isinstance(snapshot,dict):
                 for name,cfg in snapshot.items():
                     if normalize_defect(name) and isinstance(cfg,dict): classes[normalize_defect(name)]={"threshold":str(cfg.get("threshold", "")),"confidence":str(cfg.get("confidence", "")),"notes":str(cfg.get("notes", ""))}
-            r=blank_row();r.update({"id":ident,"vision":(record.get("Vision AI") or "OK").upper(),"ref":record.get("Referência") or "Não determinado","real":real,"det":det,"correspondentes":tp,"tp_d":tp,"fp_d":fp,"fn_d":fn,"detection_explicit_matrix":True,"detection_observed":True,"obs":record.get("Observação") or "","source":record.get("Origem") or "CSV AIA" ,"configuracao_classes_snapshot":snapshot if isinstance(snapshot,dict) else {}})
+            types=[part.strip() for part in (record.get("Tipos catalogados") or "").split("|") if part.strip()]
+            r=blank_row();r.update({"id":ident,"vision":(record.get("Vision AI") or "OK").upper(),"ref":record.get("Referência") or "Não determinado","real":real,"det":det,"correspondentes":tp,"tp_d":tp,"fp_d":fp,"fn_d":fn,"detection_explicit_matrix":True,"detection_observed":True,"obs":record.get("Observação") or "","source":record.get("Origem") or "CSV AIA" ,"configuracao_classes_snapshot":snapshot if isinstance(snapshot,dict) else {},"defect_types":types})
             rows.append(self.classify(r))
         if not rows: raise ValueError("CSV sem identificações válidas.")
         self._archive_current_collection(); self.rows=rows; self.history=[]; self.comparison_archive=[]; self.calibration_history=[]; self.class_thresholds=classes; self.source_file=path; self.source_analysis={"file":str(path),"format":"CSV AIA 1.3","inspections_registered":len(rows)}
@@ -8124,9 +8312,9 @@ def _aia_v130_export_excel(self):
         for key,label in (("N","N-DI"),("TP","TP-DI"),("TN","TN-DI"),("FP","FP-DI"),("FN","FN-DI"),("Accuracy","Accuracy D-I"),("Precision","Precision D-I"),("Recall / Sensibilidade","Recall D-I"),("F1","F1 D-I")): summary.append(["D-I principal",label,di.get(key,"N/D"),di.get("method","N/D")])
         for key,label in (("real","Ocorrências reais"),("det","Detecções"),("tp","TP-D"),("fp","FP-D"),("fn","FN-D")): summary.append(["D-O complementar",label,do.get(key,"N/D"),do.get("status","N/D")+" • "+do.get("method","")])
         for key,label in (("N","N-C"),("TP","TP-C"),("VN/TN","TN-C"),("FP","FP-C"),("FN","FN-C"),("Accuracy","Accuracy C")): summary.append(["C complementar",label,c.get(key,"N/D"),"Vision AI × Referência"])
-        ins=wb.create_sheet("DADOS REGISTRADOS"); header(ins,["#","Identificação","Vision AI","Referência","Real","Detectado","Correspondentes","TP-D","FP-D","FN-D","Status D-O","Snapshot configuração por classe","Observação","Origem"])
+        ins=wb.create_sheet("DADOS REGISTRADOS"); header(ins,["#","Identificação","Vision AI","Referência","Real","Detectado","Correspondentes","TP-D","FP-D","FN-D","Status D-O","Tipos catalogados","Snapshot configuração por classe","Observação","Origem"])
         for i,row0 in enumerate(self.rows,1):
-            r=normalize_row(row0); d=self.detection_for_row(r); ins.append([i,r["id"],r["vision"],r["ref"],r["real"],r["det"],r.get("correspondentes"),d["tp"],d["fp"],d["fn"],"EXPLÍCITO" if r.get("correspondentes") is not None else "ESTIMADO",json.dumps(r.get("configuracao_classes_snapshot",{}),ensure_ascii=False,sort_keys=True),r["obs"],r["source"]])
+            r=normalize_row(row0); d=self.detection_for_row(r); ins.append([i,r["id"],r["vision"],r["ref"],r["real"],r["det"],r.get("correspondentes"),d["tp"],d["fp"],d["fn"],"EXPLÍCITO" if r.get("correspondentes") is not None else "ESTIMADO"," | ".join(r.get("defect_types",[])),json.dumps(r.get("configuracao_classes_snapshot",{}),ensure_ascii=False,sort_keys=True),r["obs"],r["source"]])
         cfg=wb.create_sheet("CONFIGURAÇÃO POR CLASSE"); header(cfg,["Classe","Threshold","Confidence","Observação"])
         for name,item in sorted(self.class_thresholds.items()): cfg.append([name,item.get("threshold",""),item.get("confidence",""),item.get("notes","")])
         audit=wb.create_sheet("AUDITORIA"); header(audit,["Verificação","Resultado"]); audit.append(["D-I é indicador principal","SIM"]); audit.append(["D-O",do.get("status","N/D")]); audit.append(["Método D-O",do.get("method","N/D")]); audit.append(["Linhas explícitas",do.get("explicit_rows",0)]); audit.append(["Linhas estimadas",do.get("estimated_rows",0)]); audit.append(["Schema","1.3.0-rc"])
@@ -8136,7 +8324,7 @@ def _aia_v130_export_excel(self):
         self.status.set(f"Excel V1.3.0 RC exportado e validado: {Path(path).name}"); messagebox.showinfo("Exportação", "Excel com dados registrados, auditoria e configuração por classe criado.",parent=self)
     except Exception as exc: messagebox.showerror("Excel",f"Não foi possível exportar o Excel:\n{exc}",parent=self)
 
-FINAL_RUNTIME_BINDINGS.update({"__init__": _aia_v130_init, "view_operacao": _aia_v130_view_operacao, "quick_entry": _aia_v130_quick_entry, "import_excel": _aia_v130_import_data, "_smart_detection_occurrence": _aia_v130_detection_occurrence, "detection_for_row": _aia_v130_detection_for_row, "export_executive_report": _aia_v130_export_pdf, "export_csv": _aia_v130_export_csv, "export_excel": _aia_v130_export_excel, "save_project": _aia_v130_save_project, "load_project": _aia_v130_load_project, "_archive_current_collection": _aia_v130_archive})
+FINAL_RUNTIME_BINDINGS.update({"__init__": _aia_v130_init, "view_operacao": _aia_v130_view_operacao, "quick_entry": _aia_v130_quick_entry, "catalog_defect_types": _aia_v130_catalog_defect_types, "select_all_rows": _aia_v130_select_all_rows, "clear_row_selection": _aia_v130_clear_row_selection, "delete_row": _aia_v130_delete_selected_rows, "import_excel": _aia_v130_import_data, "_smart_detection_occurrence": _aia_v130_detection_occurrence, "detection_for_row": _aia_v130_detection_for_row, "export_executive_report": _aia_v130_export_pdf, "export_csv": _aia_v130_export_csv, "export_excel": _aia_v130_export_excel, "save_project": _aia_v130_save_project, "load_project": _aia_v130_load_project, "_archive_current_collection": _aia_v130_archive})
 for _method_name, _implementation in FINAL_RUNTIME_BINDINGS.items(): setattr(App, _method_name, _implementation)
 
 # Checkpoints da release:

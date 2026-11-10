@@ -6,10 +6,16 @@ Adicionado
 - Threshold/Confidence por classe de defeito e snapshot por coleta.
 - Campo Correspondentes para D-O explícito.
 - Exportações CSV/Excel com rastreabilidade por linha e auditoria.
+- Catálogo global de tipos de defeito, disponível em todos os projetos.
+- Inclusão inicial de 24 tipos recorrentes, com Poro normalizado para Porosidade.
+- Seleção múltipla e exclusão em lote de inspeções, com confirmação dos PINs.
 
 Alterado
 - D-O calcula TP-D=Correspondentes, FP-D=Detectado-Correspondentes e FN-D=Real-Correspondentes quando há pareamento explícito.
 - D-O sem pareamento explícito permanece disponível somente como ESTIMADO.
+- Coleta Rápida passa a ser o único ponto visível para criar registros; a edição detalhada continua disponível.
+- PIN/identificação inicia vazio e pronto para leitura/digitação, sem numeração automática.
+- Tipos catalogados são opcionais, podem ser múltiplos e não alteram TP-D, FP-D, FN-D, D-I ou C.
 
 Compatibilidade
 - C e D-I continuam independentes.
