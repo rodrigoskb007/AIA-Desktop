@@ -1,0 +1,30 @@
+AIA V1.2.0 OFICIAL - NOTAS DA RELEASE
+Data de fechamento: 10/09/2026
+
+ESCOPO CONSOLIDADO
+- Coleta manual, Coleta Rapida e detalhamento opcional por tipo de defeito.
+- Dashboard priorizando D-I; D-O e C mantidos como universos independentes.
+- Graficos de performance.
+- Comparacao multicoleta com barras, deltas e leitura visual.
+- Analise Tecnica e Defeitos.
+- Engenharia para decisao e investigacao.
+- Meta D-I com perfis BOM, EXCELENTE e PERSONALIZADO.
+- Calibracao com melhor configuracao observada e orientacao conservadora.
+- Auditoria de fonte, unidade, metodo, mapeamento e integridade.
+- Importacao Excel e exportacao Excel/CSV/PDF.
+- Salvamento de projeto JSON.
+
+CORRECAO MATEMATICA D-O CONSOLIDADA
+D-O e calculado por inspecao e somente depois somado. FP de uma inspecao nao cancela FN de outra.
+Exemplo de regressao: Real 4/Det 8 + Real 5/Det 2 => TP-D 6, FP-D 4, FN-D 3.
+
+PERFIS DE META
+BOM: Accuracy 90%; Precision 90%; Recall 95%; F1 92%; FP-DI/100 <= 5; FN-DI/100 <= 3.
+EXCELENTE: Accuracy 95%; Precision 95%; Recall 98%; F1 96%; FP-DI/100 <= 3; FN-DI/100 <= 1.
+Recall e FN-DI/100 sao tratados como criterios criticos na classificacao do projeto.
+
+LIMITACAO CONHECIDA NA RELEASE
+O botao SALVAR PROJETO gera JSON para rastreabilidade, mas esta release nao trata a reabertura de projeto JSON como fluxo principal da interface. Nao e bloqueador para o ciclo oficial.
+
+POLITICA DE MANUTENCAO
+Esta versao deve permanecer congelada. Alterar apenas diante de erro funcional, matematico, perda de dados, falha de exportacao/importacao ou requisito formalmente aprovado. Mudancas visuais pequenas devem ser acumuladas para um proximo ciclo.

@@ -1,0 +1,3 @@
+Os arquivos com nome V1.2.0 nesta pasta são cópias de referência preservadas durante a construção da RC.
+O iniciador, o atalho, o validador e o arquivo principal desta build usam exclusivamente AIA_V1_3_0_RC.py.
+A baseline oficial congelada permanece em official_v120_review e não foi modificada.
